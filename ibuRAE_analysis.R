@@ -1,3 +1,18 @@
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(gridExtra)
+
+mensIBUTable <- read.csv("~/biathlon/mensIBUTable.csv", stringsAsFactors=FALSE)
+mensJuniorTable <- read.csv("~/biathlon/mensJuniorTable.csv", stringsAsFactors=FALSE)
+mensWorldTable <- read.csv("~/biathlon/mensWorldTable.csv", stringsAsFactors=FALSE)
+womensIBUTable <- read.csv("~/biathlon/womensIBUTable.csv", stringsAsFactors=FALSE)
+womensJuniorTable <- read.csv("~/biathlon/womensJuniorTable.csv", stringsAsFactors=FALSE)
+womensWorldTable <- read.csv("~/biathlon/womensWorldTable.csv", stringsAsFactors=FALSE)
+
+names(mensWorldTable)[4] <- "url"
+
 mensWorldTable$group <- "mensWC"
 womensWorldTable$group <- "womensWC"
 mensIBUTable$group <- "mensIBU"
@@ -7,6 +22,7 @@ womensJuniorTable$group <- "womensJunior"
 
 biathlon <- rbind(mensWorldTable, womensWorldTable, mensIBUTable, womensIBUTable, mensJuniorTable, womensJuniorTable)
 
+biathlon$group <- as.factor(biathlon$group)
 biathlon$birthMonth <- month(biathlon$dob)
 biathlon$birthQuarter <- 0
 
@@ -19,4 +35,98 @@ for (i in 1:length(biathlon$birthMonth)) {
 
 biathlon$birthQuarterFactor <- as.factor(biathlon$birthQuarter)
 
+biathlonSumQuarters <- biathlon %>%
+  group_by(group) %>%
+  summarise(Quarter1 = sum(birthQuarter == 1),
+            Quarter2 = sum(birthQuarter == 2),
+            Quarter3 = sum(birthQuarter == 3),
+            Quarter4 = sum(birthQuarter == 4))
 
+View(biathlonSumQuarters)
+
+ChiTest <- chisq.test(x = c(94, 76, 87, 83), p = c(1/4, 1/4, 1/4, 1/4))
+ChiTest[[2]]
+
+
+biathlonChi <- biathlonSumQuarters %>%
+  group_by(group) %>%
+  mutate(Total = sum(Quarter1, Quarter2, Quarter3, Quarter4),
+         ChiSquared = round(chisq.test(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4))[[1]], digits = 2),
+         Df = chisq.test(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4))[[2]],
+         P.value = round(chisq.test(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4))[[3]], digits = 2),
+         Quarter1Percentage = round((Quarter1/Total)*100, digits = 1),
+         Quarter2Percentage = round((Quarter2/Total)*100, digits = 1),
+         Quarter3Percentage = round((Quarter3/Total)*100, digits = 1),
+         Quarter4Percentage = round((Quarter4/Total)*100, digits = 1))
+
+biathlonChi_long <- gather(biathlonChi, quarter, percentage, Quarter1Percentage:Quarter4Percentage)
+biathlonChi_long$group <- factor(biathlonChi_long$group, levels = c("womensJunior", "womensIBU", "womensWC", "mensJunior", "mensIBU", "mensWC"))
+
+biathlonViz <- biathlonChi_long %>%
+  arrange(group) %>%
+  select(group, quarter, percentage)
+
+View(biathlonViz)
+
+ggplot(data=biathlonViz, aes(x = quarter, y = percentage)) +
+  geom_bar(stat="identity") + 
+  facet_wrap( ~ group, ncol = 3) +
+  theme_minimal()
+
+# Create womens graph
+
+womensViz <- biathlonViz %>%
+  filter(group %in% c("womensJunior", "womensIBU", "womensWC"))
+
+levels(womensViz$group)[levels(womensViz$group) == "womensJunior"] <- "Junior"
+levels(womensViz$group)[levels(womensViz$group) == "womensIBU"] <- "IBU"
+levels(womensViz$group)[levels(womensViz$group) == "womensWC"] <- "World Cup"
+
+annoWomen <- data.frame(quarter = "Quarter2Percentage", percentage = 30, 
+                        lab = c("*"),
+                        group = factor("Junior", levels = c("Junior", "IBU", "World Cup")))
+
+annoWomen
+
+womensRAE <- ggplot(data=womensViz, aes(x = quarter, y = percentage, fill = quarter)) +
+  geom_bar(stat="identity") + 
+  scale_fill_brewer(palette = "PuRd", direction = -1, name = "Quarter", labels = c("January-March", "April-June", "July-September", "October-December")) +
+  facet_grid(. ~ group) +
+  scale_x_discrete(labels = c("Q1", "Q2", "Q3", "Q4")) +
+  xlab("Quarter") +
+  ylab("Relative distribution (%)") +
+  theme(legend.position="top") +
+  theme_classic() + 
+  theme(strip.text.x = element_text(size = 12, face = "bold")) +
+  geom_text(data = annoWomen, label = "*", nudge_x = 0.5, size = 12) +
+  ggtitle("Relativ age distribution across three competitive levels in women's biathlon") +
+  theme(plot.title = element_text(face = "bold", size = 14))
+  
+womensRAE
+
+# Create mens graph
+  
+mensViz <- biathlonViz %>%
+  filter(group %in% c("mensJunior", "mensIBU", "mensWC"))
+
+levels(mensViz$group)[levels(mensViz$group) == "mensJunior"] <- "Junior"
+levels(mensViz$group)[levels(mensViz$group) == "mensIBU"] <- "IBU"
+levels(mensViz$group)[levels(mensViz$group) == "mensWC"] <- "World Cup"  
+
+mensRAE <- ggplot(data=mensViz, aes(x = quarter, y = percentage, fill = quarter)) +
+  geom_bar(stat="identity") + 
+  scale_fill_brewer(palette = "Blues", direction = -1, name = "Quarter", labels = c("January-March", "April-June", "July-September", "October-December")) +
+  facet_grid(. ~ group) +
+  scale_x_discrete(labels = c("Q1", "Q2", "Q3", "Q4")) +
+  xlab("Quarter") +
+  ylab("Relative distribution (%)") +
+  theme(legend.position="top") +
+  theme_classic() + 
+  theme(strip.text.x = element_text(size = 12, face = "bold")) +
+  ggtitle("Relativ age distribution across three competitive levels in men's biathlon") +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+mensRAE
+
+# Combine plots
+RAEplot <- grid.arrange(womensRAE, mensRAE, nrow = 2)
