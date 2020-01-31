@@ -4,6 +4,7 @@ library(ggplot2)
 library(tidyr)
 library(gridExtra)
 library(lsr)
+library(xlsx)
 
 mensIBUTable <- read.csv("~/biathlon/mensIBUTable.csv", stringsAsFactors=FALSE)
 mensJuniorTable <- read.csv("~/biathlon/mensJuniorTable.csv", stringsAsFactors=FALSE)
@@ -84,7 +85,7 @@ View(oddsTable)
 statsTable <- biathlonChi %>%
   select(group, ChiSquared, Df, P.value, CramersV, Q1vsQ4, Q1vsQ4lowerCI, Q1vsQ4upperCI, Q1vsQ3, Q1vsQ3lowerCI, Q1vsQ3upperCI, Q1vsQ2, Q1vsQ2lowerCI, Q1vsQ2upperCI)
 
-View(statsTable)
+write.csv(statsTable, "raeStats.csv")
 
 
 
@@ -183,3 +184,5 @@ totalRAE
 
 # Combine plots
 RAEplot <- grid.arrange(womensRAE, mensRAE, totalRAE, nrow = 3)
+
+RAEplot

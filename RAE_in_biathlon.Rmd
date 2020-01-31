@@ -1,7 +1,7 @@
 ---
 title: "The relative age effect in international biathlon"
 author: "Andreas K. Winther"
-date: "1/29/2020"
+date: "1/31/2020"
 output: word_document
 bibliography: references.bib
 csl: apa.csl
@@ -11,197 +11,17 @@ csl: apa.csl
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r echo=FALSE, message=FALSE}
-library(lubridate)
-library(dplyr)
-library(ggplot2)
-library(tidyr)
-library(gridExtra)
-library(lsr)
-
-mensIBUTable <- read.csv("~/biathlon/mensIBUTable.csv", stringsAsFactors=FALSE)
-mensJuniorTable <- read.csv("~/biathlon/mensJuniorTable.csv", stringsAsFactors=FALSE)
-mensWorldTable <- read.csv("~/biathlon/mensWorldTable.csv", stringsAsFactors=FALSE)
-womensIBUTable <- read.csv("~/biathlon/womensIBUTable.csv", stringsAsFactors=FALSE)
-womensJuniorTable <- read.csv("~/biathlon/womensJuniorTable.csv", stringsAsFactors=FALSE)
-womensWorldTable <- read.csv("~/biathlon/womensWorldTable.csv", stringsAsFactors=FALSE)
-
-names(mensWorldTable)[4] <- "url"
-
-mensWorldTable$group <- "mensWC"
-womensWorldTable$group <- "womensWC"
-mensIBUTable$group <- "mensIBU"
-womensIBUTable$group <- "womensIBU"
-mensJuniorTable$group <- "mensJunior"
-womensJuniorTable$group <- "womensJunior"
-
-biathlon <- rbind(mensWorldTable, womensWorldTable, mensIBUTable, womensIBUTable, mensJuniorTable, womensJuniorTable)
-
-biathlon$birthMonth <- month(biathlon$dob)
-biathlon$birthQuarter <- 0
-
-for (i in 1:length(biathlon$birthMonth)) {
-  if (biathlon$birthMonth[i] >= 1 & biathlon$birthMonth[i] <= 3) {biathlon$birthQuarter[i] <- 1}
-  if (biathlon$birthMonth[i] >= 4 & biathlon$birthMonth[i] <= 6) {biathlon$birthQuarter[i] <- 2}
-  if (biathlon$birthMonth[i] >= 7 & biathlon$birthMonth[i] <= 9) {biathlon$birthQuarter[i] <- 3}
-  if (biathlon$birthMonth[i] >= 10 & biathlon$birthMonth[i] <= 12) {biathlon$birthQuarter[i] <- 4}
-}
-
-biathlon$birthQuarterFactor <- as.factor(biathlon$birthQuarter)
-
-biathlonSumQuarters <- biathlon %>%
-  group_by(group) %>%
-  summarise(Quarter1 = sum(birthQuarter == 1),
-            Quarter2 = sum(birthQuarter == 2),
-            Quarter3 = sum(birthQuarter == 3),
-            Quarter4 = sum(birthQuarter == 4))
-
-WCtotal <- data.frame(group = "WCtotal", biathlonSumQuarters[biathlonSumQuarters$group == "mensWC", 2:5] + biathlonSumQuarters[biathlonSumQuarters$group == "womensWC", 2:5], stringsAsFactors = FALSE)
-IBUtotal <- data.frame(group = "IBUtotal", biathlonSumQuarters[biathlonSumQuarters$group == "mensIBU", 2:5] + biathlonSumQuarters[biathlonSumQuarters$group == "womensIBU", 2:5], stringsAsFactors = FALSE)
-juniorTotal <- data.frame(group = "juniorTotal", biathlonSumQuarters[biathlonSumQuarters$group == "mensJunior", 2:5] + biathlonSumQuarters[biathlonSumQuarters$group == "womensIBU", 2:5], stringsAsFactors = FALSE)
-
-biathlonSumQuarters <- rbind(biathlonSumQuarters, WCtotal, IBUtotal, juniorTotal)
-
-biathlonChi <- biathlonSumQuarters %>%
-  group_by(group) %>%
-  mutate(Total = sum(Quarter1, Quarter2, Quarter3, Quarter4),
-         NotInQuarter1 = Total - Quarter1,
-         OddsIfQuarter1 = Quarter1/NotInQuarter1,
-         NotInQuarter2 = Total - Quarter2,
-         OddsIfQuarter2 = Quarter2/NotInQuarter2,
-         NotInQuarter3 = Total - Quarter3,
-         OddsIfQuarter3 = Quarter3/NotInQuarter3,
-         NotInQuarter4 = Total - Quarter4,
-         OddsIfQuarter4 = Quarter4/NotInQuarter4,
-         ChiSquared = round(chisq.test(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4))[[1]], digits = 2),
-         Df = chisq.test(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4))[[2]],
-         P.value = round(chisq.test(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4))[[3]], digits = 2),
-         CramersV = cramersV(x = c(Quarter1, Quarter2, Quarter3, Quarter4), p = c(1/4, 1/4, 1/4, 1/4)),
-         Q1vsQ4 = OddsIfQuarter1/OddsIfQuarter4,
-         Q1vsQ4lowerCI = exp(log(Q1vsQ4) - 1.96 * sqrt((1/Quarter1) + (1/Quarter4) + (1/NotInQuarter1) + (1/NotInQuarter4))),
-         Q1vsQ4upperCI = exp(log(Q1vsQ4) + 1.96 * sqrt((1/Quarter1) + (1/Quarter4) + (1/NotInQuarter1) + (1/NotInQuarter4))),
-         Q1vsQ3 = OddsIfQuarter1/OddsIfQuarter3,
-         Q1vsQ3lowerCI = exp(log(Q1vsQ3) - 1.96 * sqrt((1/Quarter1) + (1/Quarter3) + (1/NotInQuarter1) + (1/NotInQuarter3))),
-         Q1vsQ3upperCI = exp(log(Q1vsQ3) + 1.96 * sqrt((1/Quarter1) + (1/Quarter3) + (1/NotInQuarter1) + (1/NotInQuarter3))),
-         Q1vsQ2 = OddsIfQuarter1/OddsIfQuarter2,
-         Q1vsQ2lowerCI = exp(log(Q1vsQ2) - 1.96 * sqrt((1/Quarter1) + (1/Quarter2) + (1/NotInQuarter1) + (1/NotInQuarter2))),
-         Q1vsQ2upperCI = exp(log(Q1vsQ2) + 1.96 * sqrt((1/Quarter1) + (1/Quarter2) + (1/NotInQuarter1) + (1/NotInQuarter2))),
-         Quarter1Percentage = round((Quarter1/Total)*100, digits = 1),
-         Quarter2Percentage = round((Quarter2/Total)*100, digits = 1),
-         Quarter3Percentage = round((Quarter3/Total)*100, digits = 1),
-         Quarter4Percentage = round((Quarter4/Total)*100, digits = 1))
-
-statsTable <- biathlonChi %>%
-  select(group, ChiSquared, Df, P.value, CramersV, Q1vsQ4, Q1vsQ4lowerCI, Q1vsQ4upperCI, Q1vsQ3, Q1vsQ3lowerCI, Q1vsQ3upperCI, Q1vsQ2, Q1vsQ2lowerCI, Q1vsQ2upperCI)
-
-biathlonChi_long <- gather(biathlonChi, quarter, percentage, Quarter1Percentage:Quarter4Percentage)
-biathlonChi_long$group <- factor(biathlonChi_long$group, levels = c("womensJunior", "womensIBU", "womensWC", "mensJunior", "mensIBU", "mensWC", "juniorTotal", "IBUtotal", "WCtotal"))
-
-biathlonViz <- biathlonChi_long %>%
-  arrange(group) %>%
-  select(group, quarter, percentage)
-
-# Create womens graph
-
-womensViz <- biathlonViz %>%
-  filter(group %in% c("womensJunior", "womensIBU", "womensWC"))
-
-levels(womensViz$group)[levels(womensViz$group) == "womensJunior"] <- "Junior"
-levels(womensViz$group)[levels(womensViz$group) == "womensIBU"] <- "IBU"
-levels(womensViz$group)[levels(womensViz$group) == "womensWC"] <- "World Cup"
-
-annoWomen <- data.frame(quarter = "Quarter2Percentage", percentage = 27, 
-                        lab = c("*"),
-                        group = factor("Junior", levels = c("Junior", "IBU", "World Cup")))
-
-womensRAE <- ggplot(data=womensViz, aes(x = quarter, y = percentage, fill = quarter)) +
-  geom_bar(stat="identity") + 
-  scale_fill_brewer(palette = "PuRd", direction = -1, name = "Quarter", labels = c("January-March", "April-June", "July-September", "October-December")) +
-  facet_grid(. ~ group) +
-  scale_x_discrete(labels = c("Q1", "Q2", "Q3", "Q4")) +
-  xlab("Quarter") +
-  ylab("Relative distribution (%)") +
-  theme(legend.position="top") +
-  theme_classic() + 
-  theme(strip.text.x = element_text(size = 12, face = "bold")) +
-  geom_text(data = annoWomen, label = "*", nudge_x = 0.5, size = 12) +
-  ggtitle("Relativ age distribution across three competitive levels in women's biathlon") +
-  theme(plot.title = element_text(face = "bold", size = 14))
-
-# Create mens graph
-  
-mensViz <- biathlonViz %>%
-  filter(group %in% c("mensJunior", "mensIBU", "mensWC"))
-
-levels(mensViz$group)[levels(mensViz$group) == "mensJunior"] <- "Junior"
-levels(mensViz$group)[levels(mensViz$group) == "mensIBU"] <- "IBU"
-levels(mensViz$group)[levels(mensViz$group) == "mensWC"] <- "World Cup"  
-
-mensRAE <- ggplot(data=mensViz, aes(x = quarter, y = percentage, fill = quarter)) +
-  geom_bar(stat="identity") + 
-  scale_fill_brewer(palette = "Blues", direction = -1, name = "Quarter", labels = c("January-March", "April-June", "July-September", "October-December")) +
-  facet_grid(. ~ group) +
-  scale_x_discrete(labels = c("Q1", "Q2", "Q3", "Q4")) +
-  xlab("Quarter") +
-  ylab("Relative distribution (%)") +
-  theme(legend.position="top") +
-  theme_classic() + 
-  theme(strip.text.x = element_text(size = 12, face = "bold")) +
-  ggtitle("Relativ age distribution across three competitive levels in men's biathlon") +
-  theme(plot.title = element_text(face = "bold", size = 14))
-
-# Create total graph
-
-totalViz <- biathlonViz %>%
-  filter(group %in% c("juniorTotal", "IBUtotal", "WCtotal"))
-
-levels(totalViz$group)[levels(totalViz$group) == "juniorTotal"] <- "Junior"
-levels(totalViz$group)[levels(totalViz$group) == "IBUtotal"] <- "IBU"
-levels(totalViz$group)[levels(totalViz$group) == "WCtotal"] <- "World Cup"
-
-annoTotal <- data.frame(quarter = "Quarter2Percentage", percentage = 27, 
-                        lab = c("*"),
-                        group = factor("Junior", levels = c("Junior", "IBU", "World Cup")))
-
-totalRAE <- ggplot(data=totalViz, aes(x = quarter, y = percentage, fill = quarter)) +
-  geom_bar(stat="identity") + 
-  scale_fill_brewer(palette = "Greens", direction = -1, name = "Quarter", labels = c("January-March", "April-June", "July-September", "October-December")) +
-  facet_grid(. ~ group) +
-  scale_x_discrete(labels = c("Q1", "Q2", "Q3", "Q4")) +
-  xlab("Quarter") +
-  ylab("Relative distribution (%)") +
-  theme(legend.position="top") +
-  theme_classic() + 
-  theme(strip.text.x = element_text(size = 12, face = "bold")) +
-  geom_text(data = annoTotal, label = "*", nudge_x = 0.5, size = 12) +
-  ggtitle("Relativ age distribution across three competitive levels in biathlon") +
-  theme(plot.title = element_text(face = "bold", size = 14))
-
-RAEplot <- grid.arrange(womensRAE, mensRAE, totalRAE, nrow = 3)
-
-```
-
 ## Introduction
 The relative age effect (RAE) refers to an asymmetry in the birth-date distribution, with an over-representation of those born at the beginning of the competitive year and an under-representation of those born
-at the end (@delorme2010relative). Although @baker2014variations found this effect in a handful of winter sports at the elite level, no studies have examined whether the same pattern holds true across different levels of biathlon. Thus, the aim of the present study was to investigated whether there are RAE at different levels of competition in international biathlon.      
+at the end (@delorme2010relative. Although @baker2014variations found this effect in a handful of winter sports at the elite level, no studies have examined whether the same pattern holds true across different levels of biathlon. Thus, the aim of the present study was to investigated whether RAEs exist at different levels of competition in international biathlon.      
 
 ## Methods
-Data was obtained by scraping the official standings for both the men's and women's World Cup, IBU Cup, Junior Cup over the last five competitive seasons (2015/2016 - 2019/2020). This resulted in a total sample of 303 women and 307 men at the junior level, 325 women and 340 men at the IBU level, and 173 women and 163 men at the World Cup level. Athletes were categorized into four quarters based on their birth month (i.e., Q1 = January to March; Q2 = April to June; Q3: July to September; and Q4: October to December). Differences among relative age quartiles were considered using a chi-square goodness-of-fit test ($\chi^2$) against an assumed equal distribution. Odds Ratios (OR) (+- 95% confidence intervals) was also calculated, using Q1 as reference.    
+Data was obtained by scraping the official standings for both the men's and women's Junior Cup, IBU Cup, and World Cup, over the last five competitive seasons (2015/2016 - 2019/2020). This resulted in a sample of 303 women and 307 men at the junior level, 325 women and 340 men at the IBU level, and 173 women and 163 men at the World Cup level. Athletes were categorized into four quarters based on their birth month (i.e., Q1 = January to March; Q2 = April to June; Q3: July to September; and Q4: October to December). Differences among relative age quartiles were considered using a chi-square goodness-of-fit test ($\chi^2$) against an assumed equal distribution. Odds ratios (+- 95% confidence intervals) was also calculated, using Q1 as reference.    
 
 ## Results
-Chi-square testing revealed a significant overall effect ($\chi^2$ = 9.58, p < 0.05) in the Junior Cup, but not in IBU Cup ($\chi^2$ = 4.53, p = 0.21) and World Cup ($\chi^2$ = 4.69, p = 0.20). When men and women were considered separately, the effect persisted for the women's Junior Cup ($\chi^2$ = 10.54, p = 0.01). Odds ratios revealed that women and men born in Q1 had 2.0 (95% CI: 1.39 - 3.00) and 1.5 (95% CI: 1.13 - 2.38) times the odds of competing in the Junior Cup compared to athletes born in Q4. For the women's IBU Cup, athletes born in Q1 had 1.5 (95% CI: 1.05 - 2.14) times the odds of competing compared to athletes born in Q3.    
+Chi-square testing revealed a significant overall effect ($\chi^2$ = 9.58, p < 0.05) in the Junior Cup, but not in the IBU Cup ($\chi^2$ = 4.53, p = 0.21) or the World Cup ($\chi^2$ = 4.69, p = 0.20). When men and women were considered separately, the effect persisted for the women's Junior Cup ($\chi^2$ = 10.54, p = 0.01). Odds ratios revealed that women and men born in Q1 had 2.0 (95% CI: 1.39 - 3.00) and 1.5 (95% CI: 1.13 - 2.38) times the odds of competing in the Junior Cup compared to athletes born in Q4. For the women's IBU Cup, athletes born in Q1 had 1.5 (95% CI: 1.05 - 2.14) times the odds of competing compared to athletes born in Q3.    
 
 ## Conclusion
 Birth date has a relevant influence on participation in biathlon, particularly at the junior international level. As such, a much larger percentage of women athletes at junior level were born in the first quartile compared to the last quartile. Overall, these findings seem to indicate a deleterious impact of the RAE for the relatively younger. Although, this effect also seem to diminish to some degree at higher levels of competition.
-
-## Table 1
-```{r}
-statsTable
-```
-
-## Figure 1
-```{r}
-womensRAE
-```
 
 ## References
